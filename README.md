@@ -19,7 +19,6 @@ _You are welcome to participate in any or all of them._
 **There are a few things you can do to start participating immediately:**
 
 * Head to the SIG-Ambassador Discussions and [introduce yourself](https://github.com/ThePHPF/SIG-ambassadors/discussions/categories/introductions)
-* Weigh in on both a general [time](https://github.com/ThePHPF/SIG-ambassadors/discussions/5) and [day](https://github.com/ThePHPF/SIG-ambassadors/discussions/6) that might work for you for the next meeting
 * Start some [discussions](https://github.com/ThePHPF/SIG-ambassadors/discussions) in the area that you're interested in! I know you all have lots to say ☺️ Share your ideas! 
 * [Join phpc Discord](https://discord.phpc.social/) if you aren't already there. (Special thanks to the folks hosting and moderating the phpc Discord who are kindly providing infrastructure for us to have a place to chat directly with each other)
 
