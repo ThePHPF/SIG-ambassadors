@@ -16,6 +16,8 @@ We have broken this group into 3 sub-groups to allow those with specific interes
 
 _You are welcome to participate in any or all of them._
 
+**[Subscribe to the PHP Ambassador Meeting Calendar here.](https://calendar.google.com/calendar/u/3?cid=Y19lMzY3ZGQyMzRiNTkwZGExY2M1NjM3ZTEyZmE2ODJlYjA0YzZkOWU4N2E5OWY1ZDY2YzMxNjI5YmIxYTE4MDNkQGdyb3VwLmNhbGVuZGFyLmdvb2dsZS5jb20)**
+
 **There are a few things you can do to start participating immediately:**
 
 * Head to the SIG-Ambassador Discussions and [introduce yourself](https://github.com/ThePHPF/SIG-ambassadors/discussions/categories/introductions)
