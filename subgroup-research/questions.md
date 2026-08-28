@@ -8,3 +8,5 @@ Questions that we may wish to answer as part of the research.
  1. What data sources can we use?
  1. Do we want to measure PHP in absolute or relative terms? If relative, how do we measure other languages which might not have widely available stats such as hosting or package installations?
  1. What are people using PHP for?
+ 1. What do people consider the Unique Selling Points of PHP compared to other languages?
+ 1. What specific communities exist around PHP, e.g. Laravel / Laracasts? Are people moving away from generic communities and towards specific ones?
