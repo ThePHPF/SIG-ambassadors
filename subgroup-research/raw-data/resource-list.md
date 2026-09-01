@@ -2,18 +2,19 @@
 
 > This is a first draft and should not be considered an exhaustive list.
 
-### Scope
+## Scope
 
 This document aims to list the possible data sources and the ways to access them and the extractions that can be made for the various sources.
 
-### 1 Tools/Sources
+## 1 Tools/Sources
 
 * Google BigQuery: [Google BigQuery](https://cloud.google.com/bigquery)
 
 ### 1.1 Google BigQuery
-Google BigQuery is ricing is usage-based, you pay only for the volume of data your queries actually read, and the first terabyte per month is free, which is enough for exploratory work and for analyses of moderate size.
 
-### 2 Extractions 
+Google BigQuery is usage-based: you pay only for the volume of data your queries actually read, and the first terabyte per month is free, which is enough for exploratory work and for analyses of moderate size.
+
+## 2 Extractions
 
 * `bigquery-public-data.github_repos`: Contents, commit history and metadata for
   millions of public GitHub repositories, including full source files for a
@@ -24,8 +25,8 @@ Google BigQuery is ricing is usage-based, you pay only for the volume of data yo
 * `bigquery-public-data.stackoverflow`: Full archive of Stack Overflow questions,
   answers, comments, tags and user activity, with timestamps. Used as a proxy for
   developer interest and for the practical problems encountered when adopting a
-  technology. Updated as a periodic dump rather than continuously, so the most
-  recent weeks may be missing.
+  technology. Loaded as a periodic dump rather than continuously, and the copy on
+  BigQuery has not been refreshed since late 2022, so recent years are missing.
 
 * `httparchive.crawl`: The monthly HTTP Archive crawl, which loads millions of
   sites in both desktop and mobile configurations and records what each one
@@ -44,7 +45,7 @@ A snapshot of the open source contents of GitHub, loaded into BigQuery and query
 
 It is suited to questions such as "how many projects import this library", "how is this API actually used in real code", "what is the licence distribution by language".
 
-## Table structure
+### Table structure
 
 | Table | Granularity | Main fields |
 |---|---|---|
@@ -125,8 +126,7 @@ SELECT
 FROM classified
 ```
 
-Assumed metrics 
-
+Assumed metrics
 
 | Metric | Count | Share | What it means |
 |---|---:|---:|---|
@@ -138,18 +138,17 @@ Assumed metrics
 | `vendor/` committed to Git | 17,443 | 10.95% of Composer users | Dependencies checked into version control instead of being installed from the lock file |
 | `vendor/` committed, no manifest | 2,067 | 1.15% of repos without a manifest | Dependencies committed without the file that describes them, these repos use the ecosystem but are invisible to any manifest-based search |
 
-
 ### 2.2 `bigquery-public-data.stackoverflow` delivered by [Google BigQuery](https://console.cloud.google.com/bigquery?p=bigquery-public-data&d=stackoverflow&t=posts_questions&page=table)
 
 **data freshness: 2022-11-25 01:03:23.684 UTC, last check 2026-09-01 16:00:00.000 UTC**
 
-A full copy of the public Stack Overflow data dump loaded into BigQuery: questions, answers, comments, users, votes, tags and edit history, with original timestamps. It covers the entire history of the site from 2008.
+A full copy of the public Stack Overflow data dump loaded into BigQuery: questions, answers, comments, users, votes, tags and edit history, with original timestamps. It covers the site from 2008 to Q3 2022.
 
 It suits measuring developer interest in a technology over time, identifying recurring problems during adoption, and gauging the health of an ecosystem through the volume and quality of discussion.
 
 Compared with `github_repos` this is a **small** dataset, tens of gigabytes rather than terabytes, and therefore far cheaper to query.
 
-## Table structure
+### Table structure
 
 | Table | Granularity | Main fields |
 |---|---|---|
@@ -167,42 +166,41 @@ Compared with `github_repos` this is a **small** dataset, tens of gigabytes rath
 > [!important]
 > the query reported here needs to be reasoned and refined
 
-```sql 
-WITH totali AS (
+```sql
+WITH totals AS (
   -- Denominator: all questions. Normalising matters, site-wide volume
   -- shifted a lot over the years, so absolute counts mislead.
-  SELECT DATE_TRUNC(DATE(creation_date), QUARTER) AS trimestre,
-         COUNT(*) AS totale
+  SELECT DATE_TRUNC(DATE(creation_date), QUARTER) AS quarter,
+         COUNT(*) AS total_questions
   FROM `bigquery-public-data.stackoverflow.posts_questions`
-  GROUP BY trimestre  -- DATE() needed: creation_date is a TIMESTAMP
+  GROUP BY quarter  -- DATE() needed: creation_date is a TIMESTAMP
 ),
 
 php AS (
   -- Numerator: questions tagged 'php'.
-  SELECT DATE_TRUNC(DATE(q.creation_date), QUARTER) AS trimestre,
-         COUNT(*) AS domande_php
-  FROM `bigquery-public-data.stackoverflow.posts_questions` q,
+  SELECT DATE_TRUNC(DATE(q.creation_date), QUARTER) AS quarter,
+         COUNT(*) AS php_questions
+  FROM `bigquery-public-data.stackoverflow.posts_questions` AS q,
        -- tags is a '|'-joined string, not an ARRAY
        UNNEST(SPLIT(q.tags, '|')) AS tag
   WHERE tag = 'php'  -- exact match: LIKE '%php%' would catch 'phpunit'
-  GROUP BY trimestre
+  GROUP BY quarter
 )
 
 SELECT
-  t.trimestre,
-  p.domande_php,
-  t.totale,
-  ROUND(100 * p.domande_php / t.totale, 2) AS quota_pct
-FROM totali t
-JOIN php p USING (trimestre)  -- INNER: fine for a common tag, not a rare one
-WHERE t.trimestre >= '2012-01-01'  -- early years are noisy
-ORDER BY t.trimestre;
-
+  t.quarter,
+  p.php_questions,
+  t.total_questions,
+  ROUND(100 * p.php_questions / t.total_questions, 2) AS share_pct
+FROM totals AS t
+JOIN php AS p USING (quarter)  -- INNER: fine for a common tag, not a rare one
+WHERE t.quarter >= DATE '2012-01-01'  -- early years are noisy
+ORDER BY t.quarter;
 ```
 
 Assumed metrics
 
-| Trimest     | PHP Questions | TotTotalsale | Quota % |
+| Quarter | PHP questions | Total | Share % |
 |-------------|--------------:|-------------:|---:|
 | 2012 Q1     |        30,153 |      376,853 | 8.00 |
 | 2012 Q2     |        31,925 |      397,370 | 8.03 |
@@ -250,19 +248,19 @@ Assumed metrics
 
 Yearly assumed metrics
 
-| Year     | PHP Questions  |        Totals | Quota % |
-|----------|---------------:|--------------:|---:|
-| 2012     |        131,256 |     1,629,386 | 8.06 |
-| 2013     |        165,948 |     2,033,690 | 8.16 |
-| **2014** |    **176,717** | **2,137,435** | **8.27** |
-| 2015     |        170,146 |     2,196,676 | 7.75 |
-| 2016     |        160,796 |     2,200,802 | 7.31 |
-| 2017     |        140,930 |     2,116,212 | 6.66 |
-| 2018     |        101,917 |     1,888,989 | 5.39 |
-| 2019     |         77,653 |     1,766,933 | 4.39 |
-| 2020     |         66,049 |     1,871,695 | 3.53 |
-| 2021     |         50,143 |     1,629,580 | 3.08 |
-| 2022*    |         34,346 |     1,268,788 | 2.71 |
+| Year      | PHP questions |         Total | Share % |
+|-----------|---------------:|--------------:|---:|
+| 2012      |        131,256 |     1,629,386 | 8.06 |
+| 2013      |        165,948 |     2,033,690 | 8.16 |
+| **2014**  |    **176,717** | **2,137,435** | **8.27** |
+| 2015      |        170,146 |     2,196,676 | 7.75 |
+| 2016      |        160,796 |     2,200,802 | 7.31 |
+| 2017      |        140,930 |     2,116,212 | 6.66 |
+| 2018      |        101,917 |     1,888,989 | 5.39 |
+| 2019      |         77,653 |     1,766,933 | 4.39 |
+| 2020      |         66,049 |     1,871,695 | 3.53 |
+| 2021      |         50,143 |     1,629,580 | 3.08 |
+| 2022*     |         34,346 |     1,268,788 | 2.71 |
 
 \* Partial year: first three quarters only.
 
@@ -276,18 +274,18 @@ The `crawl` dataset is the current structure: it replaces the old dated tables (
 
 **Note the project**: this is not in `bigquery-public-data` but in the separate `httparchive` project. It is still part of the Public Dataset Program, so storage is free and only queries are billed.
 
-## The two main tables
+### The two main tables
 
-| Table | Granularity                   | Monthly size | History since |
-|---|-------------------------------|---|---|
-| `crawl.pages` | one row per page tested       | ~30 TB | June 2011 |
-| `crawl.requests` | one row per resource loaded,  | ~199 TB | June 2011 |
+| Table | Granularity | Monthly size | History since |
+|---|---|---|---|
+| `crawl.pages` | one row per page tested | ~30 TB | June 2011 |
+| `crawl.requests` | one row per resource loaded | ~199 TB | June 2011 |
 
 Both are partitioned on `date`. `pages` is clustered on `client`, `is_root_page`, `rank`, `page`; `requests` on `client`, `is_root_page`, `type`, `rank`.
 
 Each page is tested in two configurations, desktop and mobile, and since April 2022 both the origin's root page and one secondary page are tested.
 
-#### `crawl.pages` schema
+### `crawl.pages` schema
 
 | Field | Type | Contents |
 |---|---|---|
@@ -310,8 +308,7 @@ Each page is tested in two configurations, desktop and mobile, and since April 2
 > the query reported here needs to be reasoned and refined
 
 ```sql
-
-WITH siti AS (
+WITH sites AS (
   SELECT
     date,
     root_page,
@@ -320,23 +317,22 @@ WITH siti AS (
     EXISTS(
       SELECT 1 FROM UNNEST(technologies) AS t
       WHERE t.technology = 'PHP'
-    ) AS usa_php
+    ) AS uses_php
   FROM `httparchive.crawl.pages`
   -- Each extra date multiplies the cost: date is the partitioning column.
-  WHERE date IN ('2022-06-01', '2023-06-01', '2024-06-01', '2025-06-01')
+  WHERE date IN ('2023-06-01', '2024-06-01', '2025-06-01')
     AND is_root_page       -- without this every origin counts twice
     AND client = 'mobile'  -- one config is enough for a share; both would double-count
 )
 
 SELECT
   date,
-  COUNT(*) AS siti_totali,
-  COUNTIF(usa_php) AS siti_php,
-  ROUND(100 * COUNTIF(usa_php) / COUNT(*), 2) AS quota_pct
-FROM siti
+  COUNT(*) AS total_sites,
+  COUNTIF(uses_php) AS php_sites,
+  ROUND(100 * COUNTIF(uses_php) / COUNT(*), 2) AS share_pct
+FROM sites
 GROUP BY date
 ORDER BY date;
-
 ```
 
 Assumed metrics
