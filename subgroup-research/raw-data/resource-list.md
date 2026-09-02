@@ -9,10 +9,15 @@ This document aims to list the possible data sources and the ways to access them
 ## 1 Tools/Sources
 
 * Google BigQuery: [Google BigQuery](https://cloud.google.com/bigquery)
+* Stack Exchange [Data Explorer](https://data.stackexchange.com)
 
 ### 1.1 Google BigQuery
 
 Google BigQuery is usage-based: you pay only for the volume of data your queries actually read, and the first terabyte per month is free, which is enough for exploratory work and for analyses of moderate size.
+
+### 1.2 Stack Exchange Data Explorer
+
+Stack Exchange Data Explorer is a web interface that allows you to query a database of public Stack Exchange data, such as questions, answers, comments, and user activity. This database consists of a wide range of data from various Stack Exchange sites, such as Stack Overflow, Server Fault, Super User, and others. Data Explorer is free and requires no subscription. It's also the primary source of this information, and updates are logged weekly.
 
 ## 2 Extractions
 
@@ -36,6 +41,12 @@ Google BigQuery is usage-based: you pay only for the volume of data your queries
   public web and how it performs. Both tables are partitioned by `date` and run
   to tens or hundreds of terabytes per crawl, so queries must filter on the
   partition and select only the fields needed.
+
+* `stack-exchange-data-explorer.stackoverflow`:Full archive of Stack Overflow questions,
+  answers, comments, tags and user activity, with timestamps. Used as a proxy for
+  developer interest and for the practical problems encountered when adopting a
+  technology. It is updated directly from Stack Exchange every week so it should be 
+  considered as an aligned source
 
 ### 2.1 `bigquery-public-data.github_repos` delivered by [Google BigQuery](https://console.cloud.google.com/bigquery?p=bigquery-public-data&d=github_repos&t=files&page=table)
 
@@ -342,3 +353,169 @@ Assumed metrics
 | 2023-06 | 16,563,413 | 9,099,650 | 54.94 |
 | 2024-06 | 16,129,455 | 8,773,007 | 54.39 |
 | 2025-06 | 15,545,137 | 8,208,463 | 52.80 |
+
+
+### 2.4 `stack-exchange-data-explorer.stackoverflow` delivered by [Stack Exchange Data Explorer](https://data.stackexchange.com/stackoverflow/query/new)
+
+**data freshness: 2026-08-29 23:59:12.000 UTC, last check 2026-09-04 07:00:00.000 UTC**
+
+A full copy of the public Stack Overflow data dump loaded into BigQuery: questions, answers, comments, users, votes, tags and edit history, with original timestamps. It covers the site from 2008 to now.
+
+It suits measuring developer interest in a technology over time, identifying recurring problems during adoption, and gauging the health of an ecosystem through the volume and quality of discussion.
+
+### Table structure
+
+| Table | Granularity | Main fields |
+|---|---|---|
+| `posts_questions` | one row per question | `id`, `title`, `body`, `tags`, `score`, `view_count`, `answer_count`, `accepted_answer_id`, `creation_date`, `owner_user_id` |
+| `posts_answers` | one row per answer | `id`, `parent_id`, `body`, `score`, `creation_date`, `owner_user_id` |
+| `stackoverflow_posts` | all post types in one table | as above, plus `post_type_id` |
+| `comments` | one row per comment | `id`, `post_id`, `text`, `score`, `creation_date`, `user_id` |
+| `users` | one row per user | `id`, `display_name`, `reputation`, `location`, `about_me`, `creation_date`, `last_access_date`, `up_votes`, `down_votes` |
+| `votes` | one row per vote | `id`, `post_id`, `vote_type_id`, `creation_date` |
+| `badges` | one row per badge awarded | `id`, `name`, `user_id`, `date`, `class`, `tag_based` |
+| `tags` | one row per tag | `id`, `tag_name`, `count`, `excerpt_post_id`, `wiki_post_id` |
+| `post_history` | one row per revision | `id`, `post_id`, `post_history_type_id`, `creation_date`, `text` |
+| `post_links` | one row per link between posts | `id`, `post_id`, `related_post_id`, `link_type_id` |
+
+> [!important]
+> the query reported here needs to be reasoned and refined
+
+```sql
+WITH Totals AS (
+  SELECT
+    DATEADD(QUARTER, DATEDIFF(QUARTER, 0, CreationDate), 0) AS Quarter,
+    COUNT(*) AS Total
+  FROM Posts
+  WHERE PostTypeId = 1
+  GROUP BY DATEADD(QUARTER, DATEDIFF(QUARTER, 0, CreationDate), 0)
+),
+
+Php AS (
+  SELECT
+    DATEADD(QUARTER, DATEDIFF(QUARTER, 0, p.CreationDate), 0) AS Quarter,
+    COUNT(*) AS PhpQuestions
+  FROM Posts p
+  INNER JOIN PostTags pt ON pt.PostId = p.Id
+  INNER JOIN Tags t      ON t.Id = pt.TagId
+  WHERE p.PostTypeId = 1
+    AND t.TagName = ##TagName:string?php##
+  GROUP BY DATEADD(QUARTER, DATEDIFF(QUARTER, 0, p.CreationDate), 0)
+)
+
+SELECT
+  CONVERT(date, t.Quarter) AS [Quarter],
+  p.PhpQuestions,
+  t.Total,
+  ROUND(100.0 * p.PhpQuestions / t.Total, 2) AS SharePct
+FROM Totals t
+INNER JOIN Php p ON p.Quarter = t.Quarter
+WHERE t.Quarter >= '2000-01-01'
+ORDER BY t.Quarter;
+
+```
+
+Assumed metrics 
+
+| Quarter | PHP Questions | Totals | Share % |
+|---|---:|---:|---:|
+| 2008 Q3 | 628 | 17,771 | 3.53 |
+| 2008 Q4 | 1,571 | 39,359 | 3.99 |
+| 2009 Q1 | 2,257 | 53,874 | 4.19 |
+| 2009 Q2 | 3,665 | 75,456 | 4.86 |
+| 2009 Q3 | 6,395 | 98,271 | 6.51 |
+| 2009 Q4 | 7,780 | 112,597 | 6.91 |
+| 2010 Q1 | 10,238 | 141,947 | 7.21 |
+| 2010 Q2 | 11,629 | 157,794 | 7.37 |
+| 2010 Q3 | 14,300 | 185,671 | 7.70 |
+| 2010 Q4 | 14,861 | 202,975 | 7.32 |
+| 2011 Q1 | 21,032 | 263,740 | 7.97 |
+| 2011 Q2 | 23,545 | 294,743 | 7.99 |
+| 2011 Q3 | 25,350 | 309,008 | 8.20 |
+| 2011 Q4 | 24,767 | 312,579 | 7.92 |
+| 2012 Q1 | 29,619 | 371,602 | 7.97 |
+| 2012 Q2 | 31,364 | 391,724 | 8.01 |
+| 2012 Q3 | 34,154 | 415,285 | 8.22 |
+| 2012 Q4 | 34,251 | 433,301 | 7.90 |
+| 2013 Q1 | 39,173 | 484,548 | 8.08 |
+| 2013 Q2 | 38,784 | 495,722 | 7.82 |
+| 2013 Q3 | 42,354 | 511,523 | 8.28 |
+| 2013 Q4 | 43,959 | 524,524 | 8.38 |
+| **2014 Q1** | **50,896** | **583,142** | **8.73** |
+| 2014 Q2 | 44,652 | 531,152 | 8.41 |
+| 2014 Q3 | 40,225 | 505,171 | 7.96 |
+| 2014 Q4 | 38,411 | 494,160 | 7.77 |
+| 2015 Q1 | 41,588 | 523,490 | 7.94 |
+| 2015 Q2 | 43,396 | 562,491 | 7.71 |
+| 2015 Q3 | 42,689 | 553,847 | 7.71 |
+| 2015 Q4 | 40,504 | 536,076 | 7.56 |
+| 2016 Q1 | 44,086 | 570,607 | 7.73 |
+| 2016 Q2 | 42,128 | 570,235 | 7.39 |
+| 2016 Q3 | 37,635 | 530,067 | 7.10 |
+| 2016 Q4 | 35,373 | 512,637 | 6.90 |
+| 2017 Q1 | 38,761 | 553,469 | 7.00 |
+| 2017 Q2 | 36,806 | 542,909 | 6.78 |
+| 2017 Q3 | 33,773 | 519,696 | 6.50 |
+| 2017 Q4 | 30,177 | 483,632 | 6.24 |
+| 2018 Q1 | 28,814 | 486,414 | 5.92 |
+| 2018 Q2 | 26,590 | 484,374 | 5.49 |
+| 2018 Q3 | 24,591 | 462,889 | 5.31 |
+| 2018 Q4 | 21,321 | 442,271 | 4.82 |
+| 2019 Q1 | 22,093 | 456,918 | 4.84 |
+| 2019 Q2 | 20,043 | 440,624 | 4.55 |
+| 2019 Q3 | 17,960 | 424,916 | 4.23 |
+| 2019 Q4 | 17,305 | 433,337 | 3.99 |
+| 2020 Q1 | 17,119 | 447,530 | 3.83 |
+| 2020 Q2 | 18,960 | 541,085 | 3.50 |
+| 2020 Q3 | 15,612 | 456,001 | 3.42 |
+| 2020 Q4 | 13,911 | 410,532 | 3.39 |
+| 2021 Q1 | 13,823 | 420,181 | 3.29 |
+| 2021 Q2 | 12,576 | 398,521 | 3.16 |
+| 2021 Q3 | 11,394 | 365,725 | 3.12 |
+| 2021 Q4 | 10,237 | 349,957 | 2.93 |
+| 2022 Q1 | 9,527 | 356,351 | 2.67 |
+| 2022 Q2 | 9,615 | 341,286 | 2.82 |
+| 2022 Q3 | 8,927 | 326,929 | 2.73 |
+| 2022 Q4 | 7,786 | 311,400 | 2.50 |
+| 2023 Q1 | 6,348 | 269,451 | 2.36 |
+| 2023 Q2 | 4,655 | 198,332 | 2.35 |
+| 2023 Q3 | 4,250 | 175,261 | 2.42 |
+| 2023 Q4 | 3,315 | 144,938 | 2.29 |
+| 2024 Q1 | 3,257 | 138,251 | 2.36 |
+| 2024 Q2 | 2,621 | 114,361 | 2.29 |
+| 2024 Q3 | 1,848 | 83,986 | 2.20 |
+| 2024 Q4 | 1,375 | 61,921 | 2.22 |
+| 2025 Q1 | 1,034 | 48,791 | 2.12 |
+| 2025 Q2 | 572 | 28,807 | 1.99 |
+| 2025 Q3 | 288 | 17,943 | 1.61 |
+| 2025 Q4 | 251 | 14,934 | 1.68 |
+| 2026 Q1 | 160 | 10,098 | 1.58 |
+| 2026 Q2 | 127 | 6,859 | 1.85 |
+| 2026 Q3 * | 47 | 2,660 | 1.77 |
+
+\* Partial quarter: data collected up to 2026-09-02.
+
+
+Yearly assumed data 
+
+| Year | PHP Questions | Δ PHP | Totals | Δ Totals | Share % | Δ pp |
+|---|---:|---:|---:|---:|---:|---:|
+| 2008 * | 2,199 | — | 57,130 | — | 3.85 | — |
+| 2009 | 20,097 | +813.9% | 340,198 | +495.5% | 5.91 | +2.06 |
+| 2010 | 51,028 | +153.9% | 688,387 | +102.3% | 7.41 | +1.51 |
+| 2011 | 94,694 | +85.6% | 1,180,070 | +71.4% | 8.02 | +0.61 |
+| 2012 | 129,388 | +36.6% | 1,611,912 | +36.6% | 8.03 | +0.00 |
+| 2013 | 164,270 | +27.0% | 2,016,317 | +25.1% | 8.15 | +0.12 |
+| **2014** | **174,184** | +6.0% | **2,113,625** | +4.8% | **8.24** | +0.09 |
+| 2015 | 168,177 | -3.4% | 2,175,904 | +2.9% | 7.73 | -0.51 |
+| 2016 | 159,222 | -5.3% | 2,183,546 | +0.4% | 7.29 | -0.44 |
+| 2017 | 139,517 | -12.4% | 2,099,706 | -3.8% | 6.64 | -0.65 |
+| 2018 | 101,316 | -27.4% | 1,875,948 | -10.7% | 5.40 | -1.24 |
+| 2019 | 77,401 | -23.6% | 1,755,795 | -6.4% | 4.41 | -0.99 |
+| 2020 | 65,602 | -15.2% | 1,855,148 | +5.7% | 3.54 | -0.87 |
+| 2021 | 48,030 | -26.8% | 1,534,384 | -17.3% | 3.13 | -0.41 |
+| 2022 | 35,855 | -25.3% | 1,335,966 | -12.9% | 2.68 | -0.45 |
+| 2023 | 18,568 | -48.2% | 787,982 | -41.0% | 2.36 | -0.33 |
+| 2024 | 9,101 | -51.0% | 398,519 | -49.4% | 2.28 | -0.07 |
+| 2025 | 2,145 | -76.4% | 110,475 | -72.3% | 1.94 | -0.34 |
+| 2026 * | 334 | -84.4% | 19,617 | -82.2% | 1.70 | -0.24 |
